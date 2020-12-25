@@ -143,7 +143,7 @@ module CBin
                                     config = JSON.parse(File.read(path))
                                     @xcode_build_name = config['xcode_build_path']
                                   end
-                                  #默认值，在美柚上使用默认
+                                  #默认值
                                   if @xcode_build_name.nil? || Dir.exist?(@xcode_build_name)
                                     @xcode_build_name = "xcode-build/Build/Intermediates.noindex/ArchiveIntermediates/#{target_name}/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/"
                                   end
