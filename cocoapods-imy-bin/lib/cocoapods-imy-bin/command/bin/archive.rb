@@ -7,6 +7,7 @@ require 'cocoapods-imy-bin/helpers/build_helper'
 require 'cocoapods-imy-bin/helpers/spec_source_creator'
 require 'cocoapods-imy-bin/config/config_builder'
 require 'cocoapods-imy-bin/command/bin/lib/lint'
+require 'xcodeproj'
 
 module Pod
   class Command
@@ -62,12 +63,13 @@ module Pod
         end
 
         def run
-          #清除之前的缓存
-          zip_dir = CBin::Config::Builder.instance.zip_dir
-          FileUtils.rm_rf(zip_dir) if File.exist?(zip_dir)
+          # 清除之前的缓存
+          CBin::Config::Builder.instance.clean
 
           @spec = Specification.from_file(spec_file)
           generate_project
+
+          swift_pods_buildsetting
 
           build_root_spec
 
@@ -155,14 +157,18 @@ module Pod
                   "--sources=#{sources_option(@code_dependencies, @sources)}",
                   "--gen-directory=#{CBin::Config::Builder.instance.gen_dir}",
                   '--clean',
+                  "--verbose",
                   *@additional_args
                 ]
 
-                podfile= File.join(Pathname.pwd, "Podfile")
-                if File.exist?(podfile)
+                if File.exist?(Pod::Config.instance.podfile_path)
                   argvs += ['--use-podfile']
                 end
-                
+
+                unless CBin::Build::Utils.uses_frameworks?
+                  argvs += ['--use-libraries']
+                end
+
                 argvs << spec_file if spec_file
 
                 gen = Pod::Command::Gen.new(CLAide::ARGV.new(argvs))
@@ -172,6 +178,33 @@ module Pod
           end
         end
 
+        def swift_pods_buildsetting
+          # swift_project_link_header
+          worksppace_path = File.expand_path("#{CBin::Config::Builder.instance.gen_dir}/#{@spec.name}")
+          path = File.join(worksppace_path, "Pods.xcodeproj")
+          path = File.join(worksppace_path, "Pods/Pods.xcodeproj") unless File.exist?(path)
+          raise Informative,  "#{path} File no exist, please check" unless File.exist?(path)
+          project = Xcodeproj::Project.open(path)
+          project.build_configurations.each do |x|
+            x.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = true #设置生成swift inter
+          end
+          project.save
+        end
+
+        # def swift_project_link_header
+        #   worksppace_path = Pod::Config.instance.installation_root
+        #   Dir.chdir(worksppace_path) do
+        #     shell_script = <<-'SH'.strip_heredoc
+        #          ditto "${DERIVED_SOURCES_DIR}/${PRODUCT_MODULE_NAME}-Swift.h" "${CBin::Config::Builder.instance.gen_dir}"
+        #     SH
+        #     shell_script
+        #
+        #     # project = Xcodeproj::Project.open(Dir.glob('*.xcodeproj').first)
+        #     # project.build_configurations.each do |x|
+        #     #   x.build_settings['DERIVED_SOURCES_DIR']
+        #     # end
+        #   end
+        # end
 
         def spec_file
           @spec_file ||= begin
